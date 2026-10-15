@@ -192,6 +192,11 @@ def test_terminal_observation_and_screen_opt_in(client):
 def test_test_execution_requires_approval(client, monkeypatch):
     calls = []
 
+    monkeypatch.setattr(
+        "backend.app.context.tools.sandbox_command",
+        lambda argv, _cwd, _settings: argv,
+    )
+
     async def command(argv, cwd, deadline_seconds=30):
         calls.append(argv)
         return {"status": "completed", "exit_code": 0, "output": "1 passed"}
