@@ -303,7 +303,7 @@ def test_real_approved_test_subprocess(client, settings):
     request["approval_id"] = identity
     result = client.post("/v1/tools", json=request).json()
     assert result["status"] == "completed"
-    assert result["exit_code"] == 0
+    assert result["exit_code"] == 0, result["output"]
     assert "1 passed" in result["output"]
 
 
