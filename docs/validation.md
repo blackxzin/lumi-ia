@@ -21,6 +21,7 @@
 - Verificações desta revisão: `pytest -q` (101 passaram, 3 ignorados), `ruff check` (passou), `npm test --prefix apps/vscode-extension` (compilação e teste passaram), `uv lock --check` (passou) e `git diff --check` (passou).
 - `alembic check` não passou porque o banco local está na revisão `0004`, enquanto a cabeça das migrações é `0005`. Não apliquei a migração para preservar o banco local; a CI valida num banco novo.
 - Gitleaks não está instalado no ambiente local; a verificação foi configurada na CI e será executada após o push.
+- Correção da CI após falha em `tests/unit/test_voice.py`: o job Python instala também o extra `desktop`, que fornece PySide6. A verificação Alembic usa um banco temporário migrado até `head`, sem depender de um banco local preexistente.
 
 ---
 
