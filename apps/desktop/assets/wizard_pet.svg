@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 72" width="64" height="72" shape-rendering="crispEdges">
+  <title>CodePet Lume, o mago</title>
+  <!-- Corpo retangular, braços e quatro pernas seguem a referência do usuário. -->
+  <path id="body" d="M15 29H49V58H45V51H41V59H35V51H29V59H23V51H19V58H15Z"
+        fill="#F26C4A"/>
+  <path id="left-arm" d="M15 38H12V40H9V43H12V45H15Z" fill="#F26C4A"/>
+  <path id="right-arm" d="M49 38H52V40H55V43H52V45H49Z" fill="#F26C4A"/>
+  <!-- Chapéu inclinado: aba, cone dobrado, banda e estrela. -->
+  <g id="hat">
+  <path d="M11 28V26H18V24H22V21H25V18H28V15H31V12H34V10H38V13H41V16H44V20H46V24H50V26H54V28Z"
+        fill="#132C5C"/>
+  <path d="M18 24H49V26H18Z" fill="#F8C54E"/>
+  <path id="hat-star" d="M35 15H37V17H39V19H37V21H35V19H33V17H35Z" fill="#FFD36A"/>
+  </g>
+  <path id="eyes" d="M22 37V42M42 37V42"
+        fill="none" stroke="#14171E" stroke-width="3.4" stroke-linejoin="miter" stroke-linecap="square"/>
+</svg>
