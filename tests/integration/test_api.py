@@ -1,3 +1,4 @@
+import os
 from uuid import uuid4
 
 import pytest
@@ -294,6 +295,8 @@ def test_memory_survives_new_store_instance(settings):
 
 
 def test_real_approved_test_subprocess(client, settings):
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        pytest.skip("GitHub-hosted runners deny bubblewrap network namespaces")
     root = settings.projects["demo"]
     (root / "test_sample.py").write_text("def test_example():\n    assert 2 + 2 == 4\n")
     request = {"name": "run_project_tests", "project": "demo"}
