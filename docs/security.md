@@ -20,9 +20,13 @@ Patches são propostas inertes. Não há ferramentas para instalação de pacote
 
 ## Memória e observação
 
-SQLite local contém texto não criptografado. `.codepet` é criado com permissão restrita quando o diretório não existe. Use permissões de diretório e criptografia de disco conforme necessário. Exclusão pela API é lógica no SQLite; não é uma promessa de apagamento forense ou remoção de backups.
+SQLite local contém texto não criptografado. O arquivo do banco é criado ou ajustado para permissão `0600`; diretórios novos recebem `0700`. O SQLite ativa `secure_delete` e usa journal `DELETE` para reduzir resíduos recuperáveis durante exclusões. Isso não equivale a criptografia nem garante remoção forense em SSDs, snapshots ou cópias de segurança. Use criptografia de disco para proteger dados em repouso.
 
-Desativar retenção bloqueia novas gravações e recuperação; não apaga dados existentes. Consultas e mutações incluem projeto. Clientes autenticados podem acessar qualquer projeto configurado: isolamento de contexto não é isolamento de usuários.
+Exportações da API retornam `Cache-Control: no-store`. Pela GUI e CLI, arquivos de exportação são gravados atomicamente com permissão `0600`; a CLI usa `.codepet/exports/` por padrão e recusa sobrescrever arquivos existentes. Exportações ainda contêm dados pessoais: proteja cópias e backups. A GUI e `codepetctl.py clear` apagam todos os registros associados ao projeto — conversas/notas, sessões de foco, métricas, planos e exercícios — e cancelam a geração ativa desse projeto, sem tocar em backups.
+
+O workflow de CI executa Gitleaks sobre o histórico Git. Isso detecta padrões conhecidos de credenciais, mas não identifica todo segredo possível e não revoga credenciais já expostas. Revise o diff antes de publicar e rotacione qualquer segredo que tenha entrado no histórico.
+
+Desativar retenção bloqueia novas gravações e recuperação pelo assistente; não apaga dados existentes. O controle da GUI/CLI é global e vale até o backend reiniciar; `CODEPET_RETENTION` no `.env` define o padrão persistente de inicialização. A listagem administrativa, exportação e exclusão continuam disponíveis com retenção pausada. Consultas e mutações incluem projeto. Clientes autenticados podem acessar qualquer projeto configurado: isolamento de contexto não é isolamento de usuários.
 
 Pausar descarta contexto do editor, reinicia os contadores proativos e cancela gerações ativas/na fila. Novos eventos são ignorados até retomar. Perguntas manuais continuam possíveis, sem contexto do editor. A extensão cancela envios em andamento quando a pausa é solicitada por ela e sempre consulta o estado do backend antes de novos envios.
 

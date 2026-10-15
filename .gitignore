@@ -2,12 +2,21 @@
 .env
 .env.*
 !.env.example
+.envrc
 .codepet/
+.secrets/
+.aws/
+.ssh/
 __pycache__/
 .pytest_cache/
 .ruff_cache/
 *.pyc
 *.db*
+*.sqlite*
+*.p12
+*.pfx
+*.keystore
+*.jks
 node_modules/
 dist/
 *.vsix
@@ -16,3 +25,4 @@ dist/
 *.key
 id_rsa
 id_ed25519
+secrets.*

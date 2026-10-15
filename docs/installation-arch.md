@@ -1,4 +1,4 @@
-# Instalação no Arch Linux / Hyprland
+# Instalação no Arch Linux e uso do desktop Linux
 
 ## Preparação
 
@@ -36,11 +36,11 @@ Para respostas pelo Codex CLI desta conta, instale o comando `codex`, execute `c
 
 ```bash
 .venv/bin/python -m backend.app.main
-# Em outro terminal da sessão Hyprland:
+# Em outro terminal da sessão gráfica:
 QT_QPA_PLATFORM=wayland .venv/bin/python -m apps.desktop.main
 ```
 
-Inicialmente aparece apenas o pet. Duplo clique abre o chat; botão direito abre o menu. Arraste é solicitado ao compositor. No Hyprland 0.56.2 deste host, a aplicação usa `hyprctl` para tornar a janela flutuante, redimensioná-la, posicioná-la perto da borda inferior e fixá-la nos workspaces do monitor. Em outros compositores, a janela pode precisar de regras próprias.
+Inicialmente aparece apenas o pet. Duplo clique abre o chat; botão direito abre o menu. Arraste é solicitado ao compositor via Qt. No Hyprland 0.56.2 deste host, a aplicação usa `hyprctl` para tornar a janela flutuante, redimensioná-la, posicioná-la perto da borda inferior e fixá-la nos workspaces do monitor. Em X11, o Qt solicita uma posição inicial perto da borda inferior. Em Wayland sem Hyprland, a aplicação tenta essa posição antes de mostrar a janela, mas o compositor pode ignorá-la; arraste o pet para o local desejado. Fixação em todos os workspaces e posicionamento persistente dependem do compositor.
 
 O pet não ocupa uma camada layer-shell e não garante ficar acima de outras janelas. Ele anda dentro de uma janela pequena; a fixação acompanha a troca de workspace no mesmo monitor, sem atravessar monitores. A máscara de entrada e a limpeza de quadros foram verificadas visualmente neste Hyprland. `QT_QPA_PLATFORM=offscreen` testa criação/renderização, mas não substitui essa verificação no compositor.
 

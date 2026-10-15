@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import stat
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -14,6 +16,7 @@ from sqlalchemy import (
     UniqueConstraint,
     create_engine,
     delete,
+    event,
     func,
     insert,
     select,
@@ -86,11 +89,35 @@ exercises = Table(
 )
 
 
+def secure_database_path(path: Path) -> Path:
+    """Create a SQLite file with owner-only access and reject symlink targets."""
+    path = path.expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        flags = os.O_CREAT | os.O_EXCL | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(path, flags, 0o600)
+        os.close(descriptor)
+    else:
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid():
+            raise ValueError("Database must be a regular file owned by the current user")
+        os.chmod(path, 0o600, follow_symlinks=False)
+    return path
+
+
 class MemoryStore:
     def __init__(self, path: Path, retention: bool):
         self.retention = retention
-        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        path = secure_database_path(path)
         self.engine = create_engine(f"sqlite:///{path}", connect_args={"check_same_thread": False})
+
+        @event.listens_for(self.engine, "connect")
+        def configure_private_sqlite(connection, _record):
+            cursor = connection.cursor()
+            cursor.execute("PRAGMA secure_delete = ON")
+            cursor.execute("PRAGMA journal_mode = DELETE")
+            cursor.close()
         # Schema is managed by Alembic. Tests also use the real migration.
 
     def add(self, project: str, kind: str, content: str, session: str = "") -> int | None:
@@ -201,6 +228,10 @@ class MemoryStore:
     def list(self, project: str, limit: int = 200, session: str | None = None) -> list[dict]:
         if not self.retention:
             return []
+        return self.list_all(project, limit, session)
+
+    def list_all(self, project: str, limit: int = 200, session: str | None = None) -> list[dict]:
+        """List existing records for explicit user management, even when retention is paused."""
         statement = select(records).where(records.c.project == project)
         if session is not None:
             statement = statement.where(records.c.session == session)
@@ -238,8 +269,6 @@ class MemoryStore:
         return [row for _, row in ranked[: max(1, min(limit, 100))]]
 
     def edit(self, project: str, identity: int, kind: str, content: str) -> bool:
-        if not self.retention:
-            return False
         with self.engine.begin() as conn:
             return bool(
                 conn.execute(
@@ -256,6 +285,15 @@ class MemoryStore:
         with self.engine.begin() as conn:
             return conn.execute(query).rowcount
 
+    def clear_project(self, project: str) -> dict[str, int]:
+        """Delete all persisted project data, not only conversation records."""
+        tables = (records, focus_sessions, metrics, focus_plans, exercises)
+        with self.engine.begin() as conn:
+            return {
+                table.name: conn.execute(delete(table).where(table.c.project == project)).rowcount
+                for table in tables
+            }
+
     def export(self, project: str) -> list[dict]:
         if not self.retention:
             return []
@@ -266,6 +304,21 @@ class MemoryStore:
                     select(records).where(records.c.project == project).order_by(records.c.id)
                 ).mappings()
             ]
+
+    def export_project(self, project: str) -> dict[str, list[dict]]:
+        tables = (records, focus_sessions, metrics, focus_plans, exercises)
+        with self.engine.connect() as conn:
+            return {
+                table.name: [
+                    dict(row)
+                    for row in conn.execute(
+                        select(table)
+                        .where(table.c.project == project)
+                        .order_by(table.c.id)
+                    ).mappings()
+                ]
+                for table in tables
+            }
 
     def record_focus(self, project: str, session: dict) -> int | None:
         if not self.retention:

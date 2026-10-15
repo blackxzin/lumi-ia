@@ -57,7 +57,7 @@ O modo **assistente · Lume** oferece ativação por **“Lume”**, comandos pa
 
 ## Limitações atuais
 
-- PySide6 e MCP foram instalados e exercitados. No Hyprland 0.56.2 deste host, o pet flutua próximo ao canto inferior, anda dentro de uma janela de 360×190 px e a transparência foi verificada por captura real. O posicionamento usa a API de despacho do Hyprland; outros compositores precisam de adaptação.
+- PySide6 e MCP foram instalados e exercitados. No Hyprland 0.56.2 deste host, o pet flutua próximo ao canto inferior, anda dentro de uma janela de 360×190 px e a transparência foi verificada por captura real. O Hyprland recebe posicionamento e fixação por IPC; X11 recebe posição inicial pelo Qt; outros compositores Wayland podem ignorar a posição inicial, mas permitem arraste pelo compositor.
 - O DeepHat respondeu por streaming ao backend e ao cliente Qt neste host. A qualidade das respostas, o consumo total de RAM/VRAM e a operação em todos os estados do compositor ainda exigem avaliação.
 - Captura de tela é opcional via `grim` (`CODEPET_SCREEN_CAPTURE=true`) e o terminal só é recebido por observação explícita do cliente. Visão multimodal e embeddings reais continuam fora do núcleo; o provider direto da OpenAI API também não faz parte deste projeto.
 - O chat oferece voz local em português brasileiro via `espeak-ng`. A caixa **Voz** liga/desliga a leitura das respostas; a síntese começa após o streaming terminar e não bloqueia a janela. **Segure para falar** e o relay aceitam `whisper` ou `whisper-cli` (`whisper-cpp`) com um modelo local. No Arch, as fontes PipeWire/PulseAudio aparecem nas configurações de áudio, inclusive monitores virtuais como `AudioRelayVirtualMic`.
@@ -91,13 +91,18 @@ No desktop: **Guardar nota**, **Memória** e **Executar testes**. Administraçã
 .venv/bin/python scripts/codepetctl.py remember --project default --kind difficulty --content 'Tenho dificuldade com recursão'
 .venv/bin/python scripts/codepetctl.py list --project default
 .venv/bin/python scripts/codepetctl.py edit --project default --id 1 --kind topic --content 'Recursão revisada'
-.venv/bin/python scripts/codepetctl.py export --project default > memoria-exportada.json
+.venv/bin/python scripts/codepetctl.py export --project default
+# O arquivo é criado sob .codepet/exports com permissão 0600.
+# Para automação, escolha um caminho privado explicitamente:
+.venv/bin/python scripts/codepetctl.py export --project default --output /caminho/privado/memoria.json
 .venv/bin/python scripts/codepetctl.py delete --project default --id 1
+.venv/bin/python scripts/codepetctl.py retention-off
+.venv/bin/python scripts/codepetctl.py retention-on
 .venv/bin/python scripts/codepetctl.py pause
 .venv/bin/python scripts/codepetctl.py resume
 ```
 
-`CODEPET_RETENTION=false` impede novas gravações e recuperação de memória após reiniciar. Dados antigos permanecem até exclusão explícita. SQLite não é criptografado; exportações também contêm dados privados.
+`CODEPET_RETENTION=false` define a retenção desligada ao iniciar. O botão no menu **Memória** e `codepetctl.py retention-off|retention-on` alternam a gravação e a recuperação do assistente para todos os projetos até o backend reiniciar; dados antigos continuam visíveis para exportação e exclusão. O menu permite exportar todos os dados do projeto e apagar seus registros; `codepetctl.py clear` faz a mesma remoção pela CLI. SQLite não é criptografado: o banco e exportações recebem permissões privadas no Linux, mas use criptografia de disco para proteger dados em repouso. A exclusão lógica não apaga cópias em backups nem garante remoção forense.
 
 Busca de memória: `GET /v1/memory/{project}/search?q=termo`. Exercícios: `POST /v1/exercises/{project}` com `prompt`, `answer` e `topic`, depois `POST /v1/exercises/{project}/{id}/review` com `rating` de 0 a 5. O terminal é observado somente de forma explícita por `POST /v1/terminal`; não há coleta silenciosa.
 

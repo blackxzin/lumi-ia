@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import httpx
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
@@ -35,6 +35,7 @@ from backend.app.schemas.messages import (
     FocusStepsInput,
     MemoryInput,
     Observation,
+    RetentionInput,
     TerminalObservation,
     ToolInput,
 )
@@ -53,6 +54,7 @@ class Runtime:
         self.paused = False
         self.connections = 0
         self.tasks: set[asyncio.Task] = set()
+        self.task_projects: dict[asyncio.Task, str] = {}
         self.modes: dict[str, str] = {}
         self.focus: dict[str, dict] = {}
         self.proactive = Proactive(settings.proactive)
@@ -111,7 +113,7 @@ def create_app(settings: Settings | None = None, provider: ChatProvider | None =
             "v": 1,
             "status": "ok",
             "paused": state.paused,
-            "retention": settings.retention,
+            "retention": state.memory.retention,
             "projects": list(settings.projects),
             "roots": {k: str(v) for k, v in settings.projects.items()},
             "screen": "enabled" if settings.screen_capture else "disabled",
@@ -313,15 +315,29 @@ def create_app(settings: Settings | None = None, provider: ChatProvider | None =
     @app.get("/v1/memory/{name}")
     async def memory_list(name: str):
         project(name)
-        return {"v": 1, "items": await asyncio.to_thread(state.memory.list, name)}
+        return {
+            "v": 1,
+            "items": await asyncio.to_thread(state.memory.list_all, name),
+            "retention": state.memory.retention,
+        }
+
+    @app.post("/v1/retention")
+    async def set_retention(payload: RetentionInput):
+        state.memory.retention = payload.enabled
+        settings.retention = payload.enabled
+        return {"v": 1, "retention": state.memory.retention}
 
     @app.get("/v1/memory/{name}/export")
-    async def memory_export(name: str):
+    async def memory_export(name: str, response: Response):
         project(name)
+        data = await asyncio.to_thread(state.memory.export_project, name)
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Pragma"] = "no-cache"
         return {
             "v": 1,
             "project": name,
-            "items": await asyncio.to_thread(state.memory.export, name),
+            "items": data["records"],
+            "data": data,
         }
 
     @app.get("/v1/memory/{name}/search")
@@ -337,7 +353,7 @@ def create_app(settings: Settings | None = None, provider: ChatProvider | None =
     @app.post("/v1/memory/{name}")
     async def memory_add(name: str, payload: MemoryInput):
         project(name)
-        if not settings.retention:
+        if not state.memory.retention:
             raise HTTPException(409, "Retention disabled")
         return {
             "v": 1,
@@ -357,7 +373,21 @@ def create_app(settings: Settings | None = None, provider: ChatProvider | None =
     @app.delete("/v1/memory/{name}")
     async def memory_clear(name: str):
         project(name)
-        return {"v": 1, "deleted": await asyncio.to_thread(state.memory.remove, name)}
+        active = [
+            task
+            for task, task_project in state.task_projects.items()
+            if task_project == name
+        ]
+        for task in active:
+            task.cancel()
+        if active:
+            await asyncio.gather(*active, return_exceptions=True)
+        state.focus.pop(name, None)
+        state.editors.pop(name, None)
+        state.terminals.pop(name, None)
+        state.modes.pop(name, None)
+        deleted = await asyncio.to_thread(state.memory.clear_project, name)
+        return {"v": 1, "deleted": sum(deleted.values()), "by_table": deleted}
 
     @app.delete("/v1/memory/{name}/{identity}")
     async def memory_remove(name: str, identity: int):
@@ -375,7 +405,7 @@ def create_app(settings: Settings | None = None, provider: ChatProvider | None =
     @app.post("/v1/exercises/{name}")
     async def exercise_add(name: str, payload: ExerciseInput):
         project(name)
-        if not settings.retention:
+        if not state.memory.retention:
             raise HTTPException(409, "Retention disabled")
         identity = await asyncio.to_thread(
             state.memory.add_exercise, name, payload.prompt, payload.answer, payload.topic
@@ -544,7 +574,13 @@ def create_app(settings: Settings | None = None, provider: ChatProvider | None =
                     state.modes[request.project] = request.mode
                     generation = asyncio.create_task(generate(request))
                     state.tasks.add(generation)
-                    generation.add_done_callback(state.tasks.discard)
+                    state.task_projects[generation] = request.project
+
+                    def forget_task(task):
+                        state.tasks.discard(task)
+                        state.task_projects.pop(task, None)
+
+                    generation.add_done_callback(forget_task)
                 except (ValidationError, ValueError, TypeError):
                     await send("error", message="Invalid v1 request or unauthorized project")
         except (WebSocketDisconnect, TimeoutError, json.JSONDecodeError, RuntimeError):

@@ -1,4 +1,4 @@
-"""Optional Hyprland positioning through its own IPC, without blocking Qt."""
+"""Place the pet with Qt, using Hyprland IPC when that compositor is available."""
 
 import json
 import os
@@ -18,12 +18,27 @@ class HyprlandPlacement:
         self.monitor: dict | None = None
 
     def start(self) -> None:
-        if QApplication.platformName() != "wayland" or not shutil.which("hyprctl"):
-            return
-        if not os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"):
+        hyprland = (
+            QApplication.platformName() == "wayland"
+            and shutil.which("hyprctl")
+            and os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")
+        )
+        if not hyprland:
+            self._place_with_qt()
             return
         # The window must have a compositor address before we can target it.
         QTimer.singleShot(400, self._find_window)
+
+    def _place_with_qt(self) -> None:
+        """Request a lower-right initial position where the window system permits it."""
+        screen = self.pet.screen() or QApplication.primaryScreen()
+        if screen is None:
+            return
+        area = screen.availableGeometry()
+        self.pet.move(
+            area.right() - self.pet.width() - 23,
+            area.bottom() - self.pet.height() - 23,
+        )
 
     def _run(self, args: list[str], callback: Callable[[bytes], None]) -> None:
         process = QProcess(self.pet)

@@ -12,6 +12,16 @@
 - A interface foi renderizada e inspecionada em 720×700: seletor de modelo, ativação por nome e comandos visíveis. Controles que antes tinham texto cortado foram agrupados em menus; campos de texto e nível de áudio ganharam fundo legível.
 - O desktop usa DeepHat por padrão, permite escolher Codex por voz/texto/UI e não troca automaticamente em caso de falha do provider escolhido. A escolha persiste, mantendo a mesma conversa.
 
+# Atualização de manutenção — 2026-10-15
+
+- O banco SQLite passou a usar acesso do proprietário (`0600`), `secure_delete` e journal `DELETE`; a criptografia de disco continua necessária para confidencialidade em repouso.
+- Exportações agora abrangem os dados persistidos do projeto, usam `Cache-Control: no-store` pela API e arquivos `0600` pela GUI/CLI. Limpar o projeto cobre conversas/notas, foco, exercícios, planos e métricas; cópias de segurança ficam intactas. A retenção pode ser pausada e retomada pela GUI/CLI até o backend reiniciar.
+- O desktop tenta posição inicial via Qt em ambientes sem Hyprland; a política de posicionamento continua sujeita às limitações do compositor Wayland.
+- A CI adiciona Gitleaks e atualiza as actions para runtimes Node 24.
+- Verificações desta revisão: `pytest -q` (101 passaram, 3 ignorados), `ruff check` (passou), `npm test --prefix apps/vscode-extension` (compilação e teste passaram), `uv lock --check` (passou) e `git diff --check` (passou).
+- `alembic check` não passou porque o banco local está na revisão `0004`, enquanto a cabeça das migrações é `0005`. Não apliquei a migração para preservar o banco local; a CI valida num banco novo.
+- Gitleaks não está instalado no ambiente local; a verificação foi configurada na CI e será executada após o push.
+
 ---
 
 # Evidências de validação — 2026-10-10
@@ -21,7 +31,7 @@
 - Python do sistema 3.14.7; virtualenv com Python 3.12.14.
 - Hyprland 0.56.2 em Wayland; PySide6 6.12 executado com a janela real.
 - Na validação histórica, Ollama respondeu em `127.0.0.1:11434` e `ollama list` retornou `hf.co/mradermacher/DeepHat-V1-7B-GGUF:Q5_K_M`; na inspeção atual, o endpoint estava indisponível.
-- O diretório não é um repositório Git utilizável; nenhum commit foi criado.
+- Na captura de 2026-10-10, o diretório ainda não tinha um repositório Git utilizável; o repositório `blackxzin/lumi-ia` foi criado e recebeu o commit inicial em 2026-10-15.
 
 ## Verificações executadas
 

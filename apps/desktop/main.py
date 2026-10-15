@@ -4,6 +4,7 @@ import signal
 import sys
 import time
 from datetime import datetime
+from pathlib import Path
 from urllib.parse import quote
 from uuid import uuid4
 
@@ -15,6 +16,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QFormLayout,
     QFrame,
     QGridLayout,
@@ -48,6 +50,7 @@ from apps.desktop.shortcuts import GlobalShortcutPortal
 from apps.desktop.voice.input import PushToTalk
 from apps.desktop.voice.tts import LocalSpeaker
 from backend.app.core.config import Settings
+from backend.app.memory.exports import write_private_export
 
 
 class DragHandle(QLabel):
@@ -60,11 +63,29 @@ class DragHandle(QLabel):
 class MemoryDialog(QDialog):
     """Visual CRUD surface for the project's notes."""
 
-    def __init__(self, parent, items, refresh, edit_item, delete_item):
+    def __init__(
+        self,
+        parent,
+        items,
+        retention,
+        refresh,
+        edit_item,
+        delete_item,
+        export_data,
+        clear_project,
+        toggle_retention,
+    ):
         super().__init__(parent)
         self.setWindowTitle("Memória do projeto")
         self.resize(620, 420)
+        self.retention_enabled = retention
         layout = QVBoxLayout(self)
+        self.retention_button = QPushButton(self._retention_label())
+        self.retention_button.setToolTip(
+            "Aplica a todos os projetos até o backend reiniciar; CODEPET_RETENTION no .env define o padrão."
+        )
+        self.retention_button.clicked.connect(lambda: toggle_retention(self))
+        layout.addWidget(self.retention_button)
         self.items = QListWidget(self)
         self.populate(items)
         layout.addWidget(self.items, 1)
@@ -75,14 +96,27 @@ class MemoryDialog(QDialog):
         remove.clicked.connect(lambda: delete_item(self, self.items.currentItem()))
         refresh_button = QPushButton("Atualizar")
         refresh_button.clicked.connect(refresh)
+        export_button = QPushButton("Exportar…")
+        export_button.clicked.connect(lambda: export_data(self))
+        clear_button = QPushButton("Apagar projeto…")
+        clear_button.clicked.connect(lambda: clear_project(self))
         actions.addWidget(edit)
         actions.addWidget(remove)
         actions.addWidget(refresh_button)
+        actions.addWidget(export_button)
+        actions.addWidget(clear_button)
         actions.addStretch(1)
         close = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         close.rejected.connect(self.reject)
         actions.addWidget(close)
         layout.addLayout(actions)
+
+    def _retention_label(self):
+        return "Pausar gravação de memória" if self.retention_enabled else "Retomar gravação de memória"
+
+    def set_retention(self, enabled):
+        self.retention_enabled = enabled
+        self.retention_button.setText(self._retention_label())
 
     def populate(self, items):
         self.items.clear()
@@ -1232,9 +1266,13 @@ class ChatWindow(QWidget):
             dialog = MemoryDialog(
                 self,
                 data["items"],
+                data["retention"],
                 lambda: self.memory_refresh(dialog),
                 self.edit_memory_item,
                 self.delete_memory_item,
+                self.export_memory,
+                self.clear_project_memory,
+                self.toggle_memory_retention,
             )
             dialog.exec()
 
@@ -1283,6 +1321,87 @@ class ChatWindow(QWidget):
             f"/v1/memory/{project}/{data['id']}",
             None,
             lambda _: self.memory_refresh(dialog),
+        )
+
+    def export_memory(self, dialog):
+        project_name = self.project.currentText()
+        suggested = (
+            self.settings.database.expanduser().parent
+            / "exports"
+            / f"{quote(project_name, safe='')}-memory.json"
+        )
+        suggested.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        path, _ = QFileDialog.getSaveFileName(
+            dialog,
+            "Exportar dados do projeto",
+            str(suggested),
+            "JSON (*.json)",
+        )
+        if not path:
+            return
+
+        def save(data):
+            try:
+                saved = write_private_export(Path(path), data, overwrite=True)
+            except OSError as exc:
+                QMessageBox.critical(dialog, "Falha na exportação", str(exc))
+                return
+            QMessageBox.information(
+                dialog,
+                "Exportação concluída",
+                f"Arquivo salvo com permissões privadas (0600):\n{saved}\n\n"
+                "Proteja também cópias e backups deste arquivo.",
+            )
+
+        self.client.rest(
+            "GET",
+            f"/v1/memory/{quote(project_name, safe='')}/export",
+            None,
+            save,
+        )
+
+    def clear_project_memory(self, dialog):
+        approved = QMessageBox.question(
+            dialog,
+            "Apagar dados do projeto",
+            "Apagar conversas, notas, sessões de foco, exercícios, planos e métricas deste projeto? "
+            "Uma geração ou sessão de foco ativa será cancelada. A exclusão é lógica; cópias e backups existentes permanecem.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel,
+        )
+        if approved != QMessageBox.StandardButton.Yes:
+            return
+        project_name = quote(self.project.currentText(), safe="")
+
+        def cleared(data):
+            dialog.populate([])
+            self.set_focus_state({"v": 1, "project": self.project.currentText(), "status": "idle"})
+            QMessageBox.information(
+                dialog,
+                "Projeto apagado",
+                f"{data['deleted']} registros removidos do banco local. Backups não foram alterados.",
+            )
+
+        self.client.rest("DELETE", f"/v1/memory/{project_name}", None, cleared)
+
+    def toggle_memory_retention(self, dialog):
+        enabled = not dialog.retention_enabled
+        if not enabled:
+            approved = QMessageBox.question(
+                dialog,
+                "Pausar gravação",
+                "Novas conversas, métricas e dados de foco deixarão de ser gravados em todos os projetos "
+                "até o backend reiniciar. Os dados existentes serão mantidos. Continuar?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Cancel,
+            )
+            if approved != QMessageBox.StandardButton.Yes:
+                return
+        self.client.rest(
+            "POST",
+            "/v1/retention",
+            {"enabled": enabled},
+            lambda _: dialog.set_retention(enabled),
         )
 
     def quick_prompt(self, text: str):
@@ -1460,8 +1579,8 @@ def run():
     chat.speaker.speech_started.connect(lambda: pet.react({"type": "token"}))
     chat.speaker.speech_finished.connect(lambda: pet.react({"type": "done"}))
     placement = HyprlandPlacement(pet)
-    pet.show()
     placement.start()
+    pet.show()
     client.connect_backend()
     sys.exit(application.exec())
 

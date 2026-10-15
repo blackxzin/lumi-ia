@@ -72,6 +72,10 @@ class MemoryInput(StrictModel):
     content: str = Field(min_length=1, max_length=4000)
 
 
+class RetentionInput(StrictModel):
+    enabled: StrictBool
+
+
 class TerminalObservation(StrictModel):
     v: Literal[1] = 1
     project: str = Field(min_length=1, max_length=80)
