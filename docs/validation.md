@@ -21,7 +21,7 @@
 - Verificações desta revisão: `pytest -q` (101 passaram, 3 ignorados), `ruff check` (passou), `npm test --prefix apps/vscode-extension` (compilação e teste passaram), `uv lock --check` (passou) e `git diff --check` (passou).
 - `alembic check` não passou porque o banco local está na revisão `0004`, enquanto a cabeça das migrações é `0005`. Não apliquei a migração para preservar o banco local; a CI valida num banco novo.
 - Gitleaks não está instalado no ambiente local; a verificação foi configurada na CI e será executada após o push.
-- Correções da CI: o job Python instala o extra `desktop` (PySide6) e as bibliotecas do sistema `libegl1` e `libpulse0`, exigidas pelo Qt no runner Ubuntu. A verificação Alembic usa um banco temporário migrado até `head`, sem depender de um banco local preexistente.
+- Correções da CI: o job Python instala o extra `desktop` (PySide6) e dependências Ubuntu para Qt/áudio, fala local, busca no projeto e sandbox (`libegl1`, `libpulse0`, `espeak-ng`, `ripgrep`, `bubblewrap`). A verificação Alembic usa um banco temporário migrado até `head`, sem depender de um banco local preexistente.
 
 ---
 
